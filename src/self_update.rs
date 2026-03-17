@@ -77,7 +77,7 @@ pub async fn check_for_update() -> Result<Option<UpdateInfo>, UpdateError> {
         .build()?;
 
     let release: GitHubRelease = client
-        .get("https://api.github.com/repos/omgagi/omega-cli/releases/latest")
+        .get("https://api.github.com/repos/isudoajl/omega-cli/releases/latest")
         .header("Accept", "application/vnd.github.v3+json")
         .send()
         .await?

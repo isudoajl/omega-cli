@@ -8,7 +8,7 @@
 
 set -e
 
-REPO="${OMG_REPO:-omgagi/omega-cli}"
+REPO="${OMG_REPO:-isudoajl/omega-cli}"
 INSTALL_DIR="${OMG_INSTALL_DIR:-$HOME/.local/bin}"
 BINARY_NAME="omg"
 

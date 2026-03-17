@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "OMEGA CLI — deploy multi-agent workflows to any project"
 license = "MIT"
-repository = "https://github.com/omgagi/omega-cli"
+repository = "https://github.com/isudoajl/omega-cli"
 
 [[bin]]
 name = "omg"
