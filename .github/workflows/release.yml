@@ -1,0 +1,130 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            runner: macos-14
+            binary: omg
+          - target: x86_64-apple-darwin
+            runner: macos-13
+            binary: omg
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+            binary: omg
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-latest
+            binary: omg
+            cross: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross (Linux ARM only)
+        if: matrix.cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build (native)
+        if: "!matrix.cross"
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Build (cross)
+        if: matrix.cross
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Strip binary
+        if: "!matrix.cross"
+        run: strip target/${{ matrix.target }}/release/${{ matrix.binary }} || true
+
+      - name: Rename binary
+        run: |
+          cp target/${{ matrix.target }}/release/${{ matrix.binary }} omg-${{ matrix.target }}
+
+      - name: Generate SHA-256 checksum
+        run: |
+          shasum -a 256 omg-${{ matrix.target }} | awk '{print $1}' > omg-${{ matrix.target }}.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: omg-${{ matrix.target }}
+          path: |
+            omg-${{ matrix.target }}
+            omg-${{ matrix.target }}.sha256
+
+  release:
+    name: Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la artifacts/
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Generate latest.json manifest
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          cat > artifacts/latest.json << MANIFEST
+          {
+            "version": "${VERSION}",
+            "released": "$(date -u +%Y-%m-%d)",
+            "binaries": {
+              "aarch64-apple-darwin": {
+                "url": "https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/omg-aarch64-apple-darwin",
+                "sha256": "$(cat artifacts/omg-aarch64-apple-darwin.sha256)"
+              },
+              "x86_64-apple-darwin": {
+                "url": "https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/omg-x86_64-apple-darwin",
+                "sha256": "$(cat artifacts/omg-x86_64-apple-darwin.sha256)"
+              },
+              "x86_64-unknown-linux-gnu": {
+                "url": "https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/omg-x86_64-unknown-linux-gnu",
+                "sha256": "$(cat artifacts/omg-x86_64-unknown-linux-gnu.sha256)"
+              },
+              "aarch64-unknown-linux-gnu": {
+                "url": "https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/omg-aarch64-unknown-linux-gnu",
+                "sha256": "$(cat artifacts/omg-aarch64-unknown-linux-gnu.sha256)"
+              }
+            }
+          }
+          MANIFEST
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/omg-*
+            artifacts/latest.json
